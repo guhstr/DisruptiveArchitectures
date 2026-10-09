@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: disruptive-architectures-rag
+    env: python
+    region: ohio
+    plan: free
+    buildCommand: "pip install --upgrade pip && pip install -r rag/requirements.txt"
+    startCommand: "uvicorn rag.api:app --host 0.0.0.0 --port $PORT"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GEMINI_MODEL
+        value: gemini-3.5-flash-lite
+      - key: SITE_BASE_URL
+        value: https://guhstr.github.io/DisruptiveArchitectures/
