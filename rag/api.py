@@ -55,29 +55,44 @@ embeddings = np.load(EMBEDDINGS_FILE)
 
 print(f"Chunks carregados: {len(chunks)}")
 print(f"Embeddings carregados: {embeddings.shape}")
-print("Carregando modelo de embeddings...")
+_embedding_model = None
 
-embedding_model = SentenceTransformer(EMBEDDING_MODEL)
-
-print("Modelo de embeddings carregado.")
+def get_embedding_model():
+    global _embedding_model
+    if _embedding_model is None:
+        print("Carregando modelo de embeddings...")
+        import torch
+        torch.set_num_threads(1)
+        _embedding_model = SentenceTransformer(EMBEDDING_MODEL)
+        print("Modelo de embeddings carregado com sucesso.")
+    return _embedding_model
 
 
 load_dotenv(PROJECT_DIR / ".env")
 load_dotenv()
 
 api_key = os.getenv("GEMINI_API_KEY")
-gemini_model = os.getenv("GEMINI_MODEL")
+gemini_model = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
-if not api_key:
-    raise RuntimeError("GEMINI_API_KEY não encontrada no .env")
-
-if not gemini_model:
-    raise RuntimeError("GEMINI_MODEL não encontrada no .env")
-
-gemini = genai.Client(api_key=api_key)
+gemini = None
+if api_key:
+    try:
+        gemini = genai.Client(api_key=api_key)
+    except Exception as e:
+        print(f"[AVISO] Erro ao instanciar Gemini Client: {e}")
+else:
+    print("[AVISO] GEMINI_API_KEY não foi configurada nas variáveis de ambiente.")
 
 
 def executar_chamada_gemini(prompt: str) -> str:
+    global gemini
+    if not gemini:
+        current_key = os.getenv("GEMINI_API_KEY")
+        if current_key:
+            gemini = genai.Client(api_key=current_key)
+        else:
+            return "Erro: GEMINI_API_KEY não foi configurada nas variáveis de ambiente do servidor."
+
     modelos_candidatos = [gemini_model]
     for alt in ["gemini-3.5-flash", "gemini-3.5-flash-lite"]:
         if alt not in modelos_candidatos:
@@ -188,7 +203,8 @@ def criar_url(source):
 
 
 def buscar_contexto(pergunta, top_k=TOP_K):
-    pergunta_embedding = embedding_model.encode(
+    model = get_embedding_model()
+    pergunta_embedding = model.encode(
         [pergunta],
         normalize_embeddings=True
     )[0]
