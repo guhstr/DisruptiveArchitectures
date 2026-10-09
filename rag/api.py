@@ -9,7 +9,6 @@ import numpy as np
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from pydantic import BaseModel
-from sentence_transformers import SentenceTransformer
 from google import genai
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -20,9 +19,7 @@ PROJECT_DIR = BASE_DIR.parent
 CHUNKS_FILE = BASE_DIR / "data" / "chunks.json"
 EMBEDDINGS_FILE = BASE_DIR / "data" / "embeddings.npy"
 
-EMBEDDING_MODEL = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
-
-MIN_SCORE = 0.50
+MIN_SCORE = 0.62
 TOP_K = 5
 SITE_BASE_URL = os.getenv("SITE_BASE_URL", "http://127.0.0.1:8000/DisruptiveArchitectures/").rstrip("/") + "/"
 
@@ -55,17 +52,6 @@ embeddings = np.load(EMBEDDINGS_FILE)
 
 print(f"Chunks carregados: {len(chunks)}")
 print(f"Embeddings carregados: {embeddings.shape}")
-_embedding_model = None
-
-def get_embedding_model():
-    global _embedding_model
-    if _embedding_model is None:
-        print("Carregando modelo de embeddings...")
-        import torch
-        torch.set_num_threads(1)
-        _embedding_model = SentenceTransformer(EMBEDDING_MODEL)
-        print("Modelo de embeddings carregado com sucesso.")
-    return _embedding_model
 
 
 load_dotenv(PROJECT_DIR / ".env")
@@ -203,11 +189,22 @@ def criar_url(source):
 
 
 def buscar_contexto(pergunta, top_k=TOP_K):
-    model = get_embedding_model()
-    pergunta_embedding = model.encode(
-        [pergunta],
-        normalize_embeddings=True
-    )[0]
+    global gemini
+    if not gemini:
+        current_key = os.getenv("GEMINI_API_KEY")
+        if current_key:
+            gemini = genai.Client(api_key=current_key)
+        else:
+            return []
+
+    res = gemini.models.embed_content(
+        model="models/gemini-embedding-001",
+        contents=pergunta
+    )
+    pergunta_embedding = np.array(res.embeddings[0].values, dtype=np.float32)
+    norm = np.linalg.norm(pergunta_embedding)
+    if norm > 0:
+        pergunta_embedding = pergunta_embedding / norm
 
     scores = embeddings @ pergunta_embedding
     indices = np.argsort(scores)[::-1][:top_k]
