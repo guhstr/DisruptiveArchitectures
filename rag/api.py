@@ -344,6 +344,13 @@ def inicio():
     }
 
 
+@app.get("/health")
+def health():
+    return {
+        "status": "ok"
+    }
+
+
 @app.post("/ask")
 def perguntar(dados: Pergunta):
     pergunta = dados.pergunta.strip()
